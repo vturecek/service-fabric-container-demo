@@ -1,0 +1,8 @@
+FROM microsoft/aspnet:4.6.2
+#Used to build the container from the pre-compiled files directory
+RUN powershell -NoProfile -Command \
+    Import-module IISAdministration; \
+    New-IISSite -Name "site" -PhysicalPath "$env:systemdrive\inetpub\wwwroot" -BindingInformation "*:8080:"
+COPY . /inetpub/wwwroot
+#COPY /bin/Release/PublishOutput /inetpub/wwwroot
+EXPOSE 8080

@@ -1,0 +1,30 @@
+﻿body { font-family: 'Segoe UI'; padding-top: 50px; padding-bottom: 20px; }
+
+/* Set padding to keep content from hitting the edges */
+.body-content { padding-left: 15px; padding-right: 15px; }
+
+/* Set width on the form input elements since they're 100% wide by default */
+input,
+select,
+textarea { max-width: 280px; }
+
+html { font-family: 'Segoe UI'; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+
+.resultList { margin-top: 15px }
+    .resultList ul { padding: 0; margin: 0 }
+    .resultList li { list-style: none; }
+.reportServiceListItem { padding: 10px; background: #EEE; }
+    .reportServiceListItem label { width: 100px; }
+    .reportServiceListItem h3 { margin: 5px 0 }
+.reportDetails { padding: 10px; background: #EEE; }
+    .reportDetails label { width: 150px }
+    .reportDetails h3 { margin: 5px 0 }
+.tpsReport ul { padding: 0; margin: 15px }
+.tpsReport li { list-style: none; }
+.tpsReport label { width: 100px; }
+
+
+
+    .jumbotron { padding: 20px; }
+
+h1 { font-family: 'Segoe UI'; font-weight: lighter; font-size: 48px; }

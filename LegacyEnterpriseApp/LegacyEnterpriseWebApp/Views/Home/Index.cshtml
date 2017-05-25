@@ -1,0 +1,24 @@
+﻿<div class="panel panel-default">
+    <div class="panel-heading">
+        <h3 class="panel-title">Start a new TPS Report</h3>
+    </div>
+    <div class="panel-body">
+        <div class="row">
+            <div class="col-sm-3">
+                <input type="text" class="form-control" id="newReportName" placeholder="Report name" />
+            </div>
+            <div class="col-sm-3">
+                <button class="btn btn-primary" type="button" id="createTpsReport" tabindex="3">Start Enterprise TPS Report</button>
+            </div>
+        </div>
+        <div class="row top-buffer tpsReport" id="tpsResult">
+            <ul></ul>
+        </div>
+    </div>
+</div>
+@section scripts {
+    <script type="text/javascript">
+        toggleFooter(0);
+        setApiUrl('');
+    </script>
+}

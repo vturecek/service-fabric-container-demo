@@ -1,0 +1,14 @@
+version: '3'
+
+services:
+  legacyenterprisedataapp:
+    ports:
+      - "8080:8080"
+  legacyenterprisewebapp:
+    ports:
+      - "80:80"
+networks:
+  default:
+    external:
+      name: nat
+

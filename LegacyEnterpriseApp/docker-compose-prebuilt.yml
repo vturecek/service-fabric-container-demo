@@ -1,0 +1,17 @@
+version: '3'
+
+services:
+  legacyenterprisedataapp:
+    image: mfussell/legacyenterprisedataapp:v3
+    ports:
+      - "8080:8080"
+
+  legacyenterprisewebapp:
+    image: mfussell/legacyenterprisewebapp:v3
+    ports:
+      - "80:80"
+
+networks:
+  default:
+    external:
+      name: nat

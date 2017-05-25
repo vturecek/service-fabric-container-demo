@@ -1,0 +1,34 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>@ViewBag.Title</title>
+    @Styles.Render("~/Content/css")
+    @Scripts.Render("~/bundles/modernizr")
+</head>
+<body>
+    <div class="container">
+        <div class="jumbotron">
+            <h1>Legacy Enterprise App</h1>
+        </div>
+        <div class="panel-body main">
+            @RenderBody()
+        </div>
+    </div>
+    <footer class="footer" id="footer">
+        <div class="container">
+            <div class="panel panel-success" id="statusPanel">
+                <div class="panel-heading" id="statusPanelHeading">
+                    HTTP Status Code
+                </div>
+                <div class="panel-body" id="statusPanelBody">Information</div>
+            </div>
+        </div>
+    </footer>
+    @Scripts.Render("~/bundles/jquery")
+    @Scripts.Render("~/bundles/bootstrap")
+    @Scripts.Render("~/Scripts/site.js")
+    @RenderSection("scripts", required: false)
+</body>
+</html>

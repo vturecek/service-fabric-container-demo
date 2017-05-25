@@ -1,0 +1,14 @@
+version: '3'
+
+services:
+  legacyenterprisedataapp:
+    image: legacyenterprisedataapp
+    build:
+      context: .\LegacyEnterpriseDataApp
+      dockerfile: Dockerfile
+
+  legacyenterprisewebapp:
+    image: legacyenterprisewebapp
+    build:
+      context: .\LegacyEnterpriseWebApp
+      dockerfile: Dockerfile
