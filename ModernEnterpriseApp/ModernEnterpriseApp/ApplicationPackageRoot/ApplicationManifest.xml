@@ -1,11 +1,31 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <ApplicationManifest xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ApplicationTypeName="ModernEnterpriseAppType" ApplicationTypeVersion="1.0.0" xmlns="http://schemas.microsoft.com/2011/01/fabric">
   <Parameters>
+    <Parameter Name="LegacyDataService_InstanceCount" DefaultValue="-1" />
+    <Parameter Name="LegacyWebService_InstanceCount" DefaultValue="-1" />
     <Parameter Name="ReportControllerService_InstanceCount" DefaultValue="-1" />
   </Parameters>
   <!-- Import the ServiceManifest from the ServicePackage. The ServiceManifestName and ServiceManifestVersion 
        should match the Name and Version attributes of the ServiceManifest element defined in the 
        ServiceManifest.xml file. -->
+  <ServiceManifestImport>
+    <ServiceManifestRef ServiceManifestName="LegacyDataServicePkg" ServiceManifestVersion="1.0.0" />
+    <ConfigOverrides />
+    <Policies>
+      <ContainerHostPolicies CodePackageRef="Code">
+        <PortBinding ContainerPort="8080" EndpointRef="LegacyDataServiceTypeEndpoint" />
+      </ContainerHostPolicies>
+    </Policies>
+  </ServiceManifestImport>
+  <ServiceManifestImport>
+    <ServiceManifestRef ServiceManifestName="LegacyWebServicePkg" ServiceManifestVersion="1.0.0" />
+    <ConfigOverrides />
+    <Policies>
+      <ContainerHostPolicies CodePackageRef="Code">
+        <PortBinding ContainerPort="80" EndpointRef="LegacyWebServiceTypeEndpoint" />
+      </ContainerHostPolicies>
+    </Policies>
+  </ServiceManifestImport>
   <ServiceManifestImport>
     <ServiceManifestRef ServiceManifestName="ReportControllerServicePkg" ServiceManifestVersion="1.0.0" />
     <ConfigOverrides />
@@ -15,6 +35,16 @@
     <ConfigOverrides />
   </ServiceManifestImport>
   <DefaultServices>
+    <Service Name="LegacyDataService" ServiceDnsName="legacyenterprisedataapp" ServicePackageActivationMode="ExclusiveProcess">
+      <StatelessService ServiceTypeName="LegacyDataServiceType" InstanceCount="[LegacyDataService_InstanceCount]">
+        <SingletonPartition />
+      </StatelessService>
+    </Service>
+    <Service Name="LegacyWebService" ServicePackageActivationMode="ExclusiveProcess">
+      <StatelessService ServiceTypeName="LegacyWebServiceType" InstanceCount="[LegacyWebService_InstanceCount]">
+        <SingletonPartition />
+      </StatelessService>
+    </Service>
     <Service Name="ReportControllerService">
       <StatelessService ServiceTypeName="ReportControllerServiceType" InstanceCount="[ReportControllerService_InstanceCount]">
         <SingletonPartition />

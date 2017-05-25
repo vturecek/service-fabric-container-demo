@@ -1,13 +1,13 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.26403.7
+VisualStudioVersion = 15.0.26506.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{A07B5EB6-E848-4116-A8D0-A826331D98C6}") = "ModernEnterpriseApp", "ModernEnterpriseApp\ModernEnterpriseApp.sfproj", "{9FE6DAC4-BFD4-4C97-8334-6FD60F661ACE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReportProcessingService", "ReportProcessingService\ReportProcessingService.csproj", "{D07406C3-C538-47E6-A181-E839AFD53809}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ReportProcessingService", "ReportProcessingService\ReportProcessingService.csproj", "{D07406C3-C538-47E6-A181-E839AFD53809}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReportControllerService", "ReportControllerService\ReportControllerService.csproj", "{4739C9D3-6B5A-4F30-AF3B-F4E268D2D969}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ReportControllerService", "ReportControllerService\ReportControllerService.csproj", "{4739C9D3-6B5A-4F30-AF3B-F4E268D2D969}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

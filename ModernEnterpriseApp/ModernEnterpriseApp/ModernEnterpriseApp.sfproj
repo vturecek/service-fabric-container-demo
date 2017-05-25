@@ -31,6 +31,10 @@
     <ProjectReference Include="..\ReportProcessingService\ReportProcessingService.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="ApplicationPackageRoot\LegacyDataServicePkg\Config\Settings.xml" />
+    <Content Include="ApplicationPackageRoot\LegacyDataServicePkg\ServiceManifest.xml" />
+    <Content Include="ApplicationPackageRoot\LegacyWebServicePkg\Config\Settings.xml" />
+    <Content Include="ApplicationPackageRoot\LegacyWebServicePkg\ServiceManifest.xml" />
     <Content Include="packages.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.Common.targets" />
