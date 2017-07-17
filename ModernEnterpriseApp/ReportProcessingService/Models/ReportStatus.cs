@@ -9,10 +9,11 @@ namespace ReportProcessingService.Models
     [DataContract]
     internal class ReportStatus
     {
-        public ReportStatus(int step, string status)
+        public ReportStatus(int step, string status, string result)
         {
             this.Step = step;
             this.Status = status;
+            this.Result = result;
         }
         
         [DataMember]
@@ -20,5 +21,8 @@ namespace ReportProcessingService.Models
 
         [DataMember]
         public string Status { get; private set; }
+        
+        [DataMember]
+        public string Result { get; private set; }
     }
 }

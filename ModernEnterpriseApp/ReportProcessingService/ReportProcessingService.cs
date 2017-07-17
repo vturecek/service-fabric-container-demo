@@ -16,6 +16,9 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Linq;
+using System.Net.Http;
+using System.Diagnostics;
+using System.Collections.Specialized;
 
 namespace ReportProcessingService
 {
@@ -26,6 +29,12 @@ namespace ReportProcessingService
     {
         internal const string ProcessingQueueName = "processingQueue";
         internal const string StatusDictionaryName = "statusDictionary";
+
+        private const string cpuMetricName = "CPU";
+        private const string memoryMetricName = "MemoryMB";
+
+        private readonly int processingMultiplier;
+        private readonly Random random = new Random();
 
         private static readonly IEnumerable<string> processingSteps = new ReadOnlyCollection<string>(new[]
         {
@@ -40,11 +49,12 @@ namespace ReportProcessingService
         });
 
         private readonly ReportContext reportContext;
-        
+
         public ReportProcessingService(StatefulServiceContext context)
             : base(context)
         {
             this.reportContext = new ReportContext(this.Context.ServiceName.Segments.Last());
+            this.processingMultiplier = BitConverter.ToInt32(context.InitializationData, 0);
         }
 
         /// <summary>
@@ -79,107 +89,143 @@ namespace ReportProcessingService
 
         protected override async Task RunAsync(CancellationToken cancellationToken)
         {
-            IReliableConcurrentQueue<ReportProcessingStep> processQueue
-                = await this.StateManager.GetOrAddAsync<IReliableConcurrentQueue<ReportProcessingStep>>(ProcessingQueueName);
-
-            IReliableDictionary<string, ReportStatus> statusDictionary
-                = await this.StateManager.GetOrAddAsync<IReliableDictionary<string, ReportStatus>>(StatusDictionaryName);
-
-            // queue up all the processing steps and create an initial processing status if one doesn't exist already
-            using (ITransaction tx = this.StateManager.CreateTransaction())
+            using (ProcessPerformanceCounter cpuCounter = new ProcessPerformanceCounter("% Processor Time"))
             {
-                ConditionalValue<ReportStatus> tryGetResult 
-                    = await statusDictionary.TryGetValueAsync(tx, this.reportContext.Name, LockMode.Update);
-
-                if (!tryGetResult.HasValue)
+                using (ProcessPerformanceCounter memoryCounter = new ProcessPerformanceCounter("Working Set - Private"))
                 {
-                    foreach (string processingStep in processingSteps)
+                    // get a baseline metric
+                    this.Partition.ReportLoad(new LoadMetric[]
+                    {
+                        new LoadMetric(cpuMetricName, (int)Math.Round(cpuCounter.NextValue())),
+                        new LoadMetric(memoryMetricName, (int)Math.Round(memoryCounter.NextValue())),
+                    });
+
+                    IReliableQueue<ReportProcessingStep> processQueue
+                        = await this.StateManager.GetOrAddAsync<IReliableQueue<ReportProcessingStep>>(ProcessingQueueName);
+
+                    IReliableDictionary<string, ReportStatus> statusDictionary
+                        = await this.StateManager.GetOrAddAsync<IReliableDictionary<string, ReportStatus>>(StatusDictionaryName);
+
+                    // queue up all the processing steps and create an initial processing status if one doesn't exist already
+                    using (ITransaction tx = this.StateManager.CreateTransaction())
+                    {
+                        ConditionalValue<ReportStatus> tryGetResult
+                            = await statusDictionary.TryGetValueAsync(tx, this.reportContext.Name, LockMode.Update);
+
+                        if (!tryGetResult.HasValue)
+                        {
+                            foreach (string processingStep in processingSteps)
+                            {
+                                cancellationToken.ThrowIfCancellationRequested();
+
+                                await processQueue.EnqueueAsync(tx, new ReportProcessingStep(processingStep));
+                            }
+
+                            await statusDictionary.AddAsync(tx, this.reportContext.Name, new ReportStatus(0, "Not started.", String.Empty));
+                        }
+
+                        await tx.CommitAsync();
+                    }
+
+                    // start processing and checkpoint between each step so we don't lose any progress in the event of a fail-over
+                    while (true)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
 
-                        await processQueue.EnqueueAsync(tx, new ReportProcessingStep(processingStep));
-                    }
-
-                    await statusDictionary.AddAsync(tx, this.reportContext.Name, new ReportStatus(0, "Not started."));
-                }
-
-                await tx.CommitAsync();
-            }
-
-            // start processing and checkpoint between each step so we don't lose any progress in the event of a fail-over
-            while (true)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                try
-                {
-                    using (ITransaction tx = this.StateManager.CreateTransaction())
-                    {
-                        ConditionalValue<ReportProcessingStep> dequeueResult = await processQueue.TryDequeueAsync(tx, cancellationToken);
-
-                        if (!dequeueResult.HasValue)
+                        try
                         {
-                            // all done!
-                            break;
+                            // Get the next step from the queue with a peek.
+                            // This keeps the item on the queue in case processing fails.
+                            ConditionalValue<ReportProcessingStep> dequeueResult;
+                            using (ITransaction tx = this.StateManager.CreateTransaction())
+                            {
+                                dequeueResult = await processQueue.TryPeekAsync(tx, LockMode.Default);
+                            }
+
+                            if (!dequeueResult.HasValue)
+                            {
+                                // all done!
+                                break;
+                            }
+
+                            ReportProcessingStep currentProcessingStep = dequeueResult.Value;
+
+                            ServiceEventSource.Current.ServiceMessage(
+                                this.Context,
+                                $"Processing step: {currentProcessingStep.Name}");
+
+                            // Get the current processing step
+                            ConditionalValue<ReportStatus> dictionaryGetResult;
+                            using (ITransaction tx = this.StateManager.CreateTransaction())
+                            {
+                                dictionaryGetResult = await statusDictionary.TryGetValueAsync(tx, this.reportContext.Name, LockMode.Default);
+                            }
+
+                            // Perform the next processing step. 
+                            // This is potentially a long-running operation, therefore it is not executed within a transaction.
+                            ReportStatus currentStatus = dictionaryGetResult.Value;
+                            ReportStatus newStatus = await this.ProcessReport(currentStatus, currentProcessingStep, cancellationToken);
+
+                            // Once processing is done, save the results and dequeue the processing step.
+                            using (ITransaction tx = this.StateManager.CreateTransaction())
+                            {
+                                dequeueResult = await processQueue.TryDequeueAsync(tx);
+
+                                await statusDictionary.SetAsync(tx, this.reportContext.Name, newStatus);
+
+                                await tx.CommitAsync();
+                            }
+
+                            // report metrics after each iteration.
+                            // this uses perforance counters, which will report the average since the last sample was taken in the previous iteration.
+
+                            this.Partition.ReportLoad(new LoadMetric[]
+                            {
+                                new LoadMetric(cpuMetricName, (int)Math.Round(cpuCounter.NextValue())),
+                                new LoadMetric(memoryMetricName, (int)Math.Round(memoryCounter.NextValue())),
+                            });
+                        }
+                        catch (TimeoutException)
+                        {
+                            // transient error. Retry.
+                            ServiceEventSource.Current.ServiceMessage(this.Context, "TimeoutException in RunAsync.");
+                        }
+                        catch (FabricTransientException fte)
+                        {
+                            // transient error. Retry.
+                            ServiceEventSource.Current.ServiceMessage(this.Context, "FabricTransientException in RunAsync: {0}", fte.Message);
+                        }
+                        catch (FabricNotPrimaryException)
+                        {
+                            // not primary any more, time to quit.
+                            return;
+                        }
+                        catch (FabricNotReadableException)
+                        {
+                            // retry or wait until not primary
+                            ServiceEventSource.Current.ServiceMessage(this.Context, "FabricNotReadableException in RunAsync.");
+                        }
+                        catch (Exception ex)
+                        {
+                            // all other exceptions: log and re-throw.
+                            ServiceEventSource.Current.ServiceMessage(this.Context, "Exception in RunAsync: {0}", ex.Message);
+
+                            throw;
                         }
 
-                        ReportProcessingStep currentProcessingStep = dequeueResult.Value;
-                        
-                        ServiceEventSource.Current.ServiceMessage(
-                            this.Context,
-                            $"Processing step: {currentProcessingStep.Name}");
-
-                        // This takes a shared lock rather than an update lock
-                        // because this is the only place the row is written to.
-                        // If there were other writers, then this should be an update lock.
-                        ConditionalValue<ReportStatus> dictionaryGetResult = 
-                            await statusDictionary.TryGetValueAsync(tx, this.reportContext.Name, LockMode.Default);
-                        
-                        ReportStatus currentStatus = dictionaryGetResult.Value;
-                        ReportStatus newStatus = await this.ProcessReport(currentStatus, currentProcessingStep, cancellationToken);
-
-                        await statusDictionary.SetAsync(tx, this.reportContext.Name, newStatus);
-                        
-                        await tx.CommitAsync();
+                        // delay between each to step to prevent starving other processing service instances.
+                        await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
                     }
-                }
-                catch (TimeoutException)
-                {
-                    // transient error. Retry.
-                    ServiceEventSource.Current.ServiceMessage(this.Context, "TimeoutException in RunAsync.");
-                }
-                catch (FabricTransientException fte)
-                {
-                    // transient error. Retry.
-                    ServiceEventSource.Current.ServiceMessage(this.Context, "FabricTransientException in RunAsync: {0}", fte.Message);
-                }
-                catch (FabricNotPrimaryException)
-                {
-                    // not primary any more, time to quit.
-                    return;
-                }
-                catch (FabricNotReadableException)
-                {
-                    // retry or wait until not primary
-                    ServiceEventSource.Current.ServiceMessage(this.Context, "FabricNotReadableException in RunAsync.");
-                }
-                catch (Exception ex)
-                {
-                    // all other exceptions: log and re-throw.
-                    ServiceEventSource.Current.ServiceMessage(this.Context, "Exception in RunAsync: {0}", ex.Message);
 
-                    throw;
-                }
 
-                // delay between each to step to prevent starving other processing service instances.
-                await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
+                    ServiceEventSource.Current.ServiceMessage(
+
+                        this.Context,
+                            $"Processing complete!");
+                }
             }
-
-
-            ServiceEventSource.Current.ServiceMessage(
-                this.Context,
-                $"Processing complete!");
         }
+
 
         /// <summary>
         /// "Processes" a report
@@ -190,9 +236,36 @@ namespace ReportProcessingService
         /// <returns></returns>
         internal async Task<ReportStatus> ProcessReport(ReportStatus currentStatus, ReportProcessingStep currentProcessingStep, CancellationToken cancellationToken)
         {
-            await Task.Delay(TimeSpan.FromSeconds(new Random().Next(5, 15)), cancellationToken);
+            const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            TimeSpan ioDelay = TimeSpan.FromMilliseconds(this.random.Next(1000, 2000) / this.processingMultiplier);
+            int randomLength = this.random.Next(100, 1000) * this.processingMultiplier;
 
-            return new ReportStatus(currentStatus.Step + 1, currentProcessingStep.Name);
+            string randomJunk = "";
+            for (int i = 0; i < (100 * this.processingMultiplier); ++i)
+            {
+                // pointless inefficient string processing to drive up CPU and memory use
+                for (int j = 0; j < 100 * this.processingMultiplier; ++j)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    randomJunk += new string(Enumerable.Repeat(chars, randomLength).Select(s => s[this.random.Next(s.Length)]).ToArray());
+                }
+
+                int numberOfAs = 0;
+                for (int j = 0; j < randomJunk.Length; ++j)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    if (randomJunk[j] == 'A')
+                    {
+                        ++numberOfAs;
+                    }
+                }
+
+                await Task.Delay(ioDelay, cancellationToken);
+            }
+
+            return new ReportStatus(currentStatus.Step + 1, currentProcessingStep.Name, randomJunk);
         }
     }
 }

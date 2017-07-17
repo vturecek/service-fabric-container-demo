@@ -7,6 +7,7 @@ using System.Fabric;
 using Microsoft.AspNetCore.Hosting;
 using System.Fabric.Query;
 using System.Fabric.Description;
+using System.Text;
 
 namespace ReportControllerService.Controllers
 {
@@ -15,6 +16,7 @@ namespace ReportControllerService.Controllers
     {
         private const string ReportProcessingServiceTypeName = "ReportProcessingServiceType";
 
+        private readonly Random random = new Random();
         private readonly TimeSpan operationTimeout = TimeSpan.FromSeconds(20);
         private readonly FabricClient fabricClient;
         private readonly IApplicationLifetime appLifetime;
@@ -51,6 +53,9 @@ namespace ReportControllerService.Controllers
         [Route("{reportName}")]
         public async Task<IActionResult> Post(string reportName)
         {
+            int power = this.random.Next(1, 6);
+            int multiplier = (int)Math.Pow(2, power);
+
             // Now create the data service in the new application instance.
             StatefulServiceDescription dataServiceDescription = new StatefulServiceDescription()
             {
@@ -61,8 +66,17 @@ namespace ReportControllerService.Controllers
                 PartitionSchemeDescription = new SingletonPartitionSchemeDescription(),
                 ServiceName = this.GetServiceName(reportName),
                 ServiceTypeName = ReportProcessingServiceTypeName,
-                ServicePackageActivationMode = ServicePackageActivationMode.ExclusiveProcess
+                ServicePackageActivationMode = ServicePackageActivationMode.ExclusiveProcess,
+                InitializationData = BitConverter.GetBytes(multiplier)
             };
+            
+            dataServiceDescription.Metrics.Add(new StatefulServiceLoadMetricDescription()
+            {
+                Name = "Capacity1",
+                PrimaryDefaultLoad = multiplier * 10,
+                SecondaryDefaultLoad = multiplier * 10,
+                Weight = ServiceLoadMetricWeight.High
+            });
 
             try
             {
