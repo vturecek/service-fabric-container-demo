@@ -6,6 +6,14 @@ using System.Threading.Tasks;
 
 namespace ReportProcessingService
 {
+    public class ProcessPerformanceCounterException :Exception
+    {
+        public ProcessPerformanceCounterException(string message)
+            : base(message)
+        {
+        }
+    }
+
     public class ProcessPerformanceCounter : IDisposable
     {
         private PerformanceCounter counter;
@@ -30,7 +38,7 @@ namespace ReportProcessingService
                 }
             }
 
-            return 0.0f;
+            throw new ProcessPerformanceCounterException($"Could not get performance counter for {counterName}");
         }
 
         private PerformanceCounter GetCounter()
@@ -57,12 +65,9 @@ namespace ReportProcessingService
             string[] instances = cat.GetInstanceNames();
             foreach (string instance in instances)
             {
-
-                using (PerformanceCounter cnt = new PerformanceCounter("Process",
-                     "ID Process", instance, true))
+                using (PerformanceCounter counter = new PerformanceCounter("Process", "ID Process", instance, true))
                 {
-                    int val = (int)cnt.RawValue;
-                    if (val == p.Id)
+                    if ((int)counter.RawValue == p.Id)
                     {
                         return instance;
                     }

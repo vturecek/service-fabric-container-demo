@@ -53,7 +53,7 @@ namespace ReportControllerService.Controllers
         [Route("{reportName}")]
         public async Task<IActionResult> Post(string reportName)
         {
-            int power = this.random.Next(1, 6);
+            int power = this.random.Next(2, 7);
             int multiplier = (int)Math.Pow(2, power);
 
             // Now create the data service in the new application instance.
@@ -72,10 +72,26 @@ namespace ReportControllerService.Controllers
             
             dataServiceDescription.Metrics.Add(new StatefulServiceLoadMetricDescription()
             {
-                Name = "Capacity1",
-                PrimaryDefaultLoad = multiplier * 10,
-                SecondaryDefaultLoad = multiplier * 10,
+                Name = "ProcessingCapacity",
+                PrimaryDefaultLoad = multiplier,
+                SecondaryDefaultLoad = multiplier,
                 Weight = ServiceLoadMetricWeight.High
+            });
+
+            dataServiceDescription.Metrics.Add(new StatefulServiceLoadMetricDescription()
+            {
+                Name = "CPU",
+                PrimaryDefaultLoad = 0,
+                SecondaryDefaultLoad = 0,
+                Weight = ServiceLoadMetricWeight.Medium
+            });
+
+            dataServiceDescription.Metrics.Add(new StatefulServiceLoadMetricDescription()
+            {
+                Name = "MemoryMB",
+                PrimaryDefaultLoad = multiplier,
+                SecondaryDefaultLoad = multiplier,
+                Weight = ServiceLoadMetricWeight.Medium
             });
 
             try

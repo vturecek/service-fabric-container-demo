@@ -6,4 +6,7 @@
     <Parameter Name="MyParameter" Value="Value1" />
   </Section>
   -->
+  <Section Name="ReplicatorConfig">
+    <Parameter Name="MaxReplicationMessageSize" Value="1073741824" />
+  </Section>
 </Settings>
