@@ -50,14 +50,17 @@ namespace ReportProcessingService.Controllers
                     }
                 }
 
-                ConditionalValue<IReliableConcurrentQueue<ReportProcessingStep>> tryGetQueueResult =
-                    await this.stateManager.TryGetAsync<IReliableConcurrentQueue<ReportProcessingStep>>(ReportProcessingService.ProcessingQueueName);
+                ConditionalValue<IReliableQueue<ReportProcessingStep>> tryGetQueueResult =
+                    await this.stateManager.TryGetAsync<IReliableQueue<ReportProcessingStep>>(ReportProcessingService.ProcessingQueueName);
 
                 if (tryGetQueueResult.HasValue)
                 {
-                    IReliableConcurrentQueue<ReportProcessingStep> queue = tryGetQueueResult.Value;
+                    IReliableQueue<ReportProcessingStep> queue = tryGetQueueResult.Value;
 
-                    remainingValue = queue.Count;
+                    using (ITransaction tx = this.stateManager.CreateTransaction())
+                    {
+                        remainingValue = await queue.GetCountAsync(tx);
+                    }
                 }
 
                 return this.Json(new { status = statusValue, remaining = remainingValue });
