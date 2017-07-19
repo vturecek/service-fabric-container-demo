@@ -46,23 +46,11 @@ namespace ReportProcessingService.Controllers
                         if (getResult.HasValue)
                         {
                             statusValue = getResult.Value.Status;
+                            remainingValue = getResult.Value.Remaining;
                         }
                     }
                 }
-
-                ConditionalValue<IReliableQueue<ReportProcessingStep>> tryGetQueueResult =
-                    await this.stateManager.TryGetAsync<IReliableQueue<ReportProcessingStep>>(ReportProcessingService.ProcessingQueueName);
-
-                if (tryGetQueueResult.HasValue)
-                {
-                    IReliableQueue<ReportProcessingStep> queue = tryGetQueueResult.Value;
-
-                    using (ITransaction tx = this.stateManager.CreateTransaction())
-                    {
-                        remainingValue = await queue.GetCountAsync(tx);
-                    }
-                }
-
+                
                 return this.Json(new { status = statusValue, remaining = remainingValue });
             }
             catch (FabricNotPrimaryException)

@@ -122,7 +122,7 @@ namespace ReportProcessingService
                         await processQueue.EnqueueAsync(tx, new ReportProcessingStep("Finalizing"));
                         await processQueue.EnqueueAsync(tx, new ReportProcessingStep("Complete"));
 
-                        await statusDictionary.AddAsync(tx, this.reportContext.Name, new ReportStatus(0, "Not started.", String.Empty));
+                        await statusDictionary.AddAsync(tx, this.reportContext.Name, new ReportStatus(0, processingMultiplier * queueLengthMultiplier + 7, "Not started.", String.Empty));
                     }
 
                     await tx.CommitAsync();
@@ -177,16 +177,11 @@ namespace ReportProcessingService
 
                             await tx.CommitAsync();
                         }
-
+                       
                         ServiceEventSource.Current.ServiceMessage(
                            this.Context,
                            $"Processing step: {currentProcessingStep.Name} complete.");
 
-                    }
-                    catch (ProcessPerformanceCounterException ppce)
-                    {
-                        // transient error. Retry.
-                        ServiceEventSource.Current.ServiceMessage(this.Context, ppce.Message);
                     }
                     catch (TimeoutException)
                     {
@@ -272,31 +267,26 @@ namespace ReportProcessingService
         /// <param name="e"></param>
         private void StatusDictionary_DictionaryChanged(object sender, NotifyDictionaryChangedEventArgs<string, ReportStatus> e)
         {
+            ReportStatus reportStatus;
+
+            if (e.Action == NotifyDictionaryChangedAction.Add)
+            {
+                reportStatus = ((NotifyDictionaryItemAddedEventArgs<string, ReportStatus>)e).Value;
+            }
+            if (e.Action == NotifyDictionaryChangedAction.Update)
+            {
+                reportStatus = ((NotifyDictionaryItemUpdatedEventArgs<string, ReportStatus>)e).Value;
+            }
+            else
+            {
+                return;
+            }
+
             try
             {
-                ConditionalValue<IReliableQueue<ReportProcessingStep>> tryGetQueueResult =
-                       this.StateManager.TryGetAsync<IReliableQueue<ReportProcessingStep>>(ReportProcessingService.ProcessingQueueName).GetAwaiter().GetResult();
-
-                long remainingValue = 0;
-                if (tryGetQueueResult.HasValue)
-                {
-                    IReliableQueue<ReportProcessingStep> queue = tryGetQueueResult.Value;
-
-                    using (ITransaction tx = this.StateManager.CreateTransaction())
-                    {
-                        remainingValue = queue.GetCountAsync(tx).GetAwaiter().GetResult();
-                    }
-                }
-
-                int cpuMetricValue = 0;
-                int processingCapacityMetricValue = 0;
+                int processingCapacityMetricValue = (int)reportStatus.Remaining / queueLengthMultiplier;
+                int cpuMetricValue = reportStatus.Remaining > 0 ? this.GetCpuCounterValue() : 0;
                 int memoryMetricValue = this.GetMemoryMbCounterValue();
-
-                if (remainingValue > 0)
-                {
-                    cpuMetricValue = this.GetCpuCounterValue();
-                    processingCapacityMetricValue = (int)remainingValue / queueLengthMultiplier;
-                }
 
                 this.Partition.ReportLoad(new LoadMetric[]
                 {
@@ -307,13 +297,12 @@ namespace ReportProcessingService
 
                 ServiceEventSource.Current.ServiceMessage(
                     this.Context,
-                    $"CPU reported: {cpuMetricValue}%. Memory reported: {memoryMetricValue} MB");
+                    $"State change event: {e.Action.ToString()}. Processing capacity reported: {processingCapacityMetricValue}. CPU reported: {cpuMetricValue}%. Memory reported: {memoryMetricValue} MB");
             }
-            catch (Exception ex)
+            catch (ProcessPerformanceCounterException ppce)
             {
-                ServiceEventSource.Current.ServiceMessage(
-                    this.Context,
-                    $"Failed to get load metrics: {ex.Message}");
+                // transient error.
+                ServiceEventSource.Current.ServiceMessage(this.Context, ppce.Message);
             }
         }
         
@@ -375,7 +364,7 @@ namespace ReportProcessingService
                 await Task.Delay(ioDelay, cancellationToken);
             }
 
-            return new ReportStatus(currentStatus.Step + 1, currentProcessingStep.Name, randomJunk);
+            return new ReportStatus(currentStatus.Step + 1, currentStatus.Remaining - 1, currentProcessingStep.Name, randomJunk);
         }
     }
 }

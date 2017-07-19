@@ -75,7 +75,7 @@ namespace ReportControllerService.Controllers
                 Name = "ProcessingCapacity",
                 PrimaryDefaultLoad = multiplier,
                 SecondaryDefaultLoad = multiplier,
-                Weight = ServiceLoadMetricWeight.High
+                Weight = ServiceLoadMetricWeight.Medium
             });
 
             dataServiceDescription.Metrics.Add(new StatefulServiceLoadMetricDescription()
@@ -83,7 +83,7 @@ namespace ReportControllerService.Controllers
                 Name = "CPU",
                 PrimaryDefaultLoad = 0,
                 SecondaryDefaultLoad = 0,
-                Weight = ServiceLoadMetricWeight.Medium
+                Weight = ServiceLoadMetricWeight.High
             });
 
             dataServiceDescription.Metrics.Add(new StatefulServiceLoadMetricDescription()

@@ -9,7 +9,7 @@ using Microsoft.ServiceFabric.Services.Runtime;
 
 namespace ReportProcessingService
 {
-    [EventSource(Name = "MyCompany-ModernEnterpriseApp-ReportProcessingService")]
+    [EventSource(Name = "ModernEnterpriseApp-ReportProcessingService")]
     internal sealed class ServiceEventSource : EventSource
     {
         public static readonly ServiceEventSource Current = new ServiceEventSource();

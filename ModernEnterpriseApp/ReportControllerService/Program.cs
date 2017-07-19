@@ -1,4 +1,5 @@
-﻿using Microsoft.ServiceFabric.Services.Runtime;
+﻿using Microsoft.Diagnostics.EventFlow.ServiceFabric;
+using Microsoft.ServiceFabric.Services.Runtime;
 using System;
 using System.Diagnostics;
 using System.Threading;
@@ -15,18 +16,21 @@ namespace ReportControllerService
         {
             try
             {
-                // The ServiceManifest.XML file defines one or more service type names.
-                // Registering a service maps a service type name to a .NET type.
-                // When Service Fabric creates an instance of this service type,
-                // an instance of the class is created in this host process.
+                using (var diagnosticsPipeline = ServiceFabricDiagnosticPipelineFactory.CreatePipeline("Modernapp-ReportControllerServiceType-DiagnosticsPipeline"))
+                {
+                    // The ServiceManifest.XML file defines one or more service type names.
+                    // Registering a service maps a service type name to a .NET type.
+                    // When Service Fabric creates an instance of this service type,
+                    // an instance of the class is created in this host process.
 
-                ServiceRuntime.RegisterServiceAsync("ReportControllerServiceType",
+                    ServiceRuntime.RegisterServiceAsync("ReportControllerServiceType",
                     context => new ReportControllerService(context)).GetAwaiter().GetResult();
 
-                ServiceEventSource.Current.ServiceTypeRegistered(Process.GetCurrentProcess().Id, typeof(ReportControllerService).Name);
+                    ServiceEventSource.Current.ServiceTypeRegistered(Process.GetCurrentProcess().Id, typeof(ReportControllerService).Name);
 
-                // Prevents this host process from terminating so services keeps running. 
-                Thread.Sleep(Timeout.Infinite);
+                    // Prevents this host process from terminating so services keeps running. 
+                    Thread.Sleep(Timeout.Infinite);
+                }
             }
             catch (Exception e)
             {

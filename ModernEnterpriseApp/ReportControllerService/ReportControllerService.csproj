@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net452</TargetFramework>
+    <TargetFramework>net461</TargetFramework>
     <RuntimeIdentifier>win7-x64</RuntimeIdentifier>
     <IsServiceFabricServiceProject>True</IsServiceFabricServiceProject>
   </PropertyGroup>
@@ -13,6 +13,9 @@
     <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="2.0.0" />
     <PackageReference Include="Microsoft.AspNetCore" Version="1.1.1" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc" Version="1.1.2" />
+    <PackageReference Include="Microsoft.Diagnostics.EventFlow.Inputs.EventSource" Version="1.1.1" />
+    <PackageReference Include="Microsoft.Diagnostics.EventFlow.Outputs.ApplicationInsights" Version="1.1.5" />
+    <PackageReference Include="Microsoft.Diagnostics.EventFlow.ServiceFabric" Version="1.1.4" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="1.1.1" />
     <PackageReference Include="Microsoft.ServiceFabric.AspNetCore.Kestrel" Version="2.6.220" />
     <PackageReference Include="Microsoft.ServiceFabric.Data" Version="2.6.220" />

@@ -9,15 +9,19 @@ namespace ReportProcessingService.Models
     [DataContract]
     internal class ReportStatus
     {
-        public ReportStatus(int step, string status, string result)
+        public ReportStatus(int step, int remaining, string status, string result)
         {
             this.Step = step;
+            this.Remaining = remaining;
             this.Status = status;
             this.Result = result;
         }
         
         [DataMember]
         public int Step { get; private set; }
+
+        [DataMember]
+        public int Remaining { get; private set; }
 
         [DataMember]
         public string Status { get; private set; }

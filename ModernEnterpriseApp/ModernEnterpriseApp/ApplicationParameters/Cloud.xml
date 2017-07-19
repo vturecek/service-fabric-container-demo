@@ -4,5 +4,6 @@
     <Parameter Name="LegacyDataService_InstanceCount" Value="-1" />
     <Parameter Name="LegacyWebService_InstanceCount" Value="-1" />
     <Parameter Name="ReportControllerService_InstanceCount" Value="-1" />
+    <Parameter Name="AppInsightsKey" Value="" />
   </Parameters>
 </Application>

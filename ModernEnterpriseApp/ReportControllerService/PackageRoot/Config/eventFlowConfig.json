@@ -1,0 +1,25 @@
+﻿{
+  "inputs": [
+    {
+      "type": "EventSource",
+      "sources": [
+        { "providerName": "Microsoft-ServiceFabric-Services" },
+        { "providerName": "ModernEnterpriseApp-ReportControllerService" }
+      ]
+    }
+  ],
+  "filters": [
+    {
+      "type": "drop",
+      "include": "Level == Verbose"
+    }
+  ],
+  "outputs": [
+    {
+      "type": "ApplicationInsights",
+      // (replace the following value with your AI resource's instrumentation key)
+      "instrumentationKey": "servicefabric:/Diagnostics/AppInsightsKey"
+    }
+  ],
+  "schemaVersion": "2016-08-11"
+}

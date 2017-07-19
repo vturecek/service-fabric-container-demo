@@ -4,6 +4,7 @@
     <Parameter Name="LegacyDataService_InstanceCount" DefaultValue="-1" />
     <Parameter Name="LegacyWebService_InstanceCount" DefaultValue="-1" />
     <Parameter Name="ReportControllerService_InstanceCount" DefaultValue="-1" />
+    <Parameter Name="AppInsightsKey" DefaultValue="" />
   </Parameters>
   <!-- Import the ServiceManifest from the ServicePackage. The ServiceManifestName and ServiceManifestVersion 
        should match the Name and Version attributes of the ServiceManifest element defined in the 
@@ -28,11 +29,27 @@
   </ServiceManifestImport>
   <ServiceManifestImport>
     <ServiceManifestRef ServiceManifestName="ReportControllerServicePkg" ServiceManifestVersion="1.0.0" />
-    <ConfigOverrides />
+    <ConfigOverrides>
+      <ConfigOverride Name="Config">
+        <Settings>
+          <Section Name="Diagnostics">
+            <Parameter Name="AppInsightsKey" Value="[AppInsightsKey]" />
+          </Section>
+        </Settings>
+      </ConfigOverride>
+    </ConfigOverrides>
   </ServiceManifestImport>
   <ServiceManifestImport>
     <ServiceManifestRef ServiceManifestName="ReportProcessingServicePkg" ServiceManifestVersion="1.0.0" />
-    <ConfigOverrides />
+    <ConfigOverrides>
+      <ConfigOverride Name="Config">
+        <Settings>
+          <Section Name="Diagnostics">
+            <Parameter Name="AppInsightsKey" Value="[AppInsightsKey]" />
+          </Section>
+        </Settings>
+      </ConfigOverride>
+    </ConfigOverrides>
   </ServiceManifestImport>
   <DefaultServices>
     <Service Name="LegacyDataService" ServiceDnsName="legacyenterprisedataapp" ServicePackageActivationMode="ExclusiveProcess">
