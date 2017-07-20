@@ -35,7 +35,9 @@ namespace ReportProcessingService
         private readonly int processingMultiplier;
         private readonly Random random = new Random();
         private readonly ReportContext reportContext;
-        
+
+        private CancellationTokenSource metricReportCancellationSource;
+        private Task metricReportTask;
 
         public ReportProcessingService(StatefulServiceContext context)
             : base(context)
@@ -44,13 +46,39 @@ namespace ReportProcessingService
             this.processingMultiplier = BitConverter.ToInt32(context.InitializationData, 0);
             this.cpuCounter = new ProcessPerformanceCounter("% Processor Time");
             this.memoryCounter = new ProcessPerformanceCounter("Working Set - Private");
-            this.StateManager.StateManagerChanged += StateManager_StateManagerChanged;
-            
-            // get baseline perf counter samples
-            this.GetCpuCounterValue();
-            this.GetMemoryMbCounterValue();
         }
-        
+
+        protected override Task OnOpenAsync(ReplicaOpenMode openMode, CancellationToken cancellationToken)
+        {
+            this.metricReportCancellationSource = new CancellationTokenSource();
+            CancellationToken token = this.metricReportCancellationSource.Token;
+
+            this.metricReportTask = Task.Run(async () =>
+            {
+                while (true)
+                {
+                    token.ThrowIfCancellationRequested();
+
+                    await ReportLoadMetricsAsync(token);
+                    await Task.Delay(TimeSpan.FromSeconds(20), token);
+                }
+            }
+            , token)
+            .ContinueWith(t => t.Exception.Handle(e => true));
+
+            return base.OnOpenAsync(openMode, cancellationToken);
+        }
+
+        protected override Task OnCloseAsync(CancellationToken cancellationToken)
+        {
+            if (this.metricReportCancellationSource != null)
+            {
+                this.metricReportCancellationSource.Cancel();
+                this.metricReportCancellationSource.Dispose();
+            }
+
+            return base.OnCloseAsync(cancellationToken);
+        }
 
         /// <summary>
         /// Starts up ASP.NET Core IWebHost to handle requests to the service.
@@ -177,7 +205,7 @@ namespace ReportProcessingService
 
                             await tx.CommitAsync();
                         }
-                       
+
                         ServiceEventSource.Current.ServiceMessage(
                            this.Context,
                            $"Processing step: {currentProcessingStep.Name} complete.");
@@ -225,79 +253,51 @@ namespace ReportProcessingService
                 throw;
             }
         }
-        
-        /// <summary>
-        /// Event handler that is called whenever the StateManager is changed.
-        /// </summary>
-        /// <remarks>
-        /// This is event is invoked on both primary and secondary replicas when the StateManager is modified.
-        /// For this application, this is used to attach an event handler to a Reliable Dictionary in the StateManager
-        /// on both primary and secondary replicas.
-        /// </remarks>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void StateManager_StateManagerChanged(object sender, NotifyStateManagerChangedEventArgs e)
+
+
+        private async Task ReportLoadMetricsAsync(CancellationToken token)
         {
-            NotifyStateManagerSingleEntityChangedEventArgs operation = e as NotifyStateManagerSingleEntityChangedEventArgs;
+            List<LoadMetric> metrics = new List<LoadMetric>(3);
 
-            if (operation == null)
+            try
             {
-                return;
-            }
+                ConditionalValue<IReliableDictionary<string, ReportStatus>> tryGetDictionaryResult =
+                    await this.StateManager.TryGetAsync<IReliableDictionary<string, ReportStatus>>(ReportProcessingService.StatusDictionaryName);
 
-            if (operation.Action == NotifyStateManagerChangedAction.Add)
-            {
-                if (operation.ReliableState.Name == StatusDictionaryName)
+                if (tryGetDictionaryResult.HasValue)
                 {
-                    IReliableDictionary<string, ReportStatus> dictionary = operation.ReliableState as IReliableDictionary<string, ReportStatus>;
+                    IReliableDictionary<string, ReportStatus> dictionary = tryGetDictionaryResult.Value;
 
-                    if (dictionary != null)
+                    using (ITransaction tx = this.StateManager.CreateTransaction())
                     {
-                        dictionary.DictionaryChanged += StatusDictionary_DictionaryChanged;
+                        ConditionalValue<ReportStatus> getResult = await dictionary.TryGetValueAsync(tx, this.reportContext.Name);
+
+                        if (getResult.HasValue)
+                        {
+                            metrics.Add(new LoadMetric(processingCapacityMetricName, getResult.Value.Remaining / queueLengthMultiplier));
+                        }
                     }
                 }
             }
-        }
-
-        /// <summary>
-        /// Event handler that is called every time a change is made to the Status dictionary.
-        /// Each time a chance is made to the dictionary, a new load metric is reported.
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void StatusDictionary_DictionaryChanged(object sender, NotifyDictionaryChangedEventArgs<string, ReportStatus> e)
-        {
-            ReportStatus reportStatus;
-
-            if (e.Action == NotifyDictionaryChangedAction.Add)
+            catch (Exception ex)
             {
-                reportStatus = ((NotifyDictionaryItemAddedEventArgs<string, ReportStatus>)e).Value;
-            }
-            if (e.Action == NotifyDictionaryChangedAction.Update)
-            {
-                reportStatus = ((NotifyDictionaryItemUpdatedEventArgs<string, ReportStatus>)e).Value;
-            }
-            else
-            {
-                return;
+                ServiceEventSource.Current.ServiceMessage(this.Context, $"Failed to get processing capacity metric. {ex.Message}");
             }
 
             try
             {
-                int processingCapacityMetricValue = (int)reportStatus.Remaining / queueLengthMultiplier;
-                int cpuMetricValue = reportStatus.Remaining > 0 ? this.GetCpuCounterValue() : 0;
+                int cpuMetricValue = this.GetCpuCounterValue();
                 int memoryMetricValue = this.GetMemoryMbCounterValue();
 
-                this.Partition.ReportLoad(new LoadMetric[]
-                {
-                    new LoadMetric(processingCapacityMetricName, processingCapacityMetricValue),
-                    new LoadMetric(cpuMetricName,cpuMetricValue),
-                    new LoadMetric(memoryMetricName, memoryMetricValue),
-                });
+                metrics.Add(new LoadMetric(cpuMetricName, cpuMetricValue));
+                metrics.Add(new LoadMetric(memoryMetricName, memoryMetricValue));
+
+                this.Partition.ReportLoad(metrics);
 
                 ServiceEventSource.Current.ServiceMessage(
                     this.Context,
-                    $"State change event: {e.Action.ToString()}. Processing capacity reported: {processingCapacityMetricValue}. CPU reported: {cpuMetricValue}%. Memory reported: {memoryMetricValue} MB");
+                    $"Metrics reported: {String.Join(", ", metrics.Select(x => x.Name + ": " + x.Value))}");
+
             }
             catch (ProcessPerformanceCounterException ppce)
             {
@@ -305,7 +305,8 @@ namespace ReportProcessingService
                 ServiceEventSource.Current.ServiceMessage(this.Context, ppce.Message);
             }
         }
-        
+
+
         /// <summary>
         /// Gets the next value from the process CPU performance counter.
         /// </summary>
@@ -349,7 +350,7 @@ namespace ReportProcessingService
 
                 // pointless inefficient string processing to drive up CPU and memory use
                 randomJunk += new string(Enumerable.Repeat(chars, randomLength).Select(s => s[this.random.Next(s.Length)]).ToArray());
-                
+
                 int numberOfAs = 0;
                 for (int j = 0; j < randomJunk.Length; ++j)
                 {
